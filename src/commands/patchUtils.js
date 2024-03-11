@@ -15,17 +15,21 @@ function convertToPatch(bodyText) {
   const PatchStateEnd = 5;
 
   // diff --git a/filepath_1 b/filepath_2
-  const regexPatchFileHeader = new RegExp(/^diff\s+--git\s+a(\/.*)\s+b(\/.*)$/);
+  // This regular expression matches the header line of a git diff output.
+  // It matches lines that start with "diff --git a/" followed by any characters, a space, "b/", and any characters.
+  // The parentheses create capture groups for the paths of the "a" and "b" files.
+  const regexPatchFileHeader = /^diff\s+--git\s+a(\/.*)\s+b(\/.*)$/;
 
   //@@ -347,7 +347,8 @@ Field(GNVS,AnyAcc,Lock,Preserve)
   //@@ -1 +1,3 @@ xx
-  const regexPatchHunkAsciiHeader = new RegExp(/^@@\s+-(?:\d+,)?(\d+)\s+\+(?:\d+,)?(\d+)\s+@@.*$/);
+  // It matches the hunk headers and capture the line numbers.
+  const regexPatchHunkAsciiHeader = /^@@\s+-(?:\d+,)?(\d+)\s+\+(?:\d+,)?(\d+)\s+@@.*$/;
 
   //delta ####
   //literal ####
-  const regexPatchHunkBinarySubHeader = new RegExp(/^(delta|literal)\s+[0-9]+\s*$/);
+  const regexPatchHunkBinarySubHeader = /^(delta|literal)\s+[0-9]+\s*$/;
 
-  const regexPatchHunkBinary = new RegExp(/^[a-zA-Z]\S+$/);
+  const regexPatchHunkBinary = /^[a-zA-Z]\S+$/;
 
   let patchBody = "";
   let addedLines = 0;
@@ -127,31 +131,27 @@ function convertToPatch(bodyText) {
 
 // Convert "[EDK2] [Patch V2 2/5] xxx." to "0002-xxx.patch"
 // Convert "[EDK2] [Patch V2] xxx" to "0001-xxx.patch"
-function GetPatchFileName(subject, success) {
-  const regexSubject = new RegExp(/(?:\[edk2-devel\]\s*)?\[PATCH\s*(?:V\d+\s+)?(?:(\d+)\/\d+)?\]\s*(.*?)[.\s]*$/, "i");
+function getPatchFileName(subject, success) {
+  const regexSubject = /(?:\[edk2-devel\]\s*)?\[PATCH\s*(?:V\d+\s+)?(?:(\d+)\/\d+)?\]\s*(.*?)[.\s]*$/i;
   let mailSubject = subject;
   // Extract the patch index and patch title
-  const m = mailSubject.match(regexSubject);
-  if (m) {
-    let patchIndex = 0;
-    try {
-      patchIndex = parseInt(m[1].toString());
-    } catch {
-      patchIndex = 1;
-    }
-    mailSubject = `${patchIndex.toString().padStart(4, "0")}-${m[2]}`;
+  let match = mailSubject.match(regexSubject);
+  if (match) {
+    let patchIndex = parseInt(match[1]) || 1;
+    mailSubject = `${patchIndex.toString().padStart(4, "0")}-${match[2]}`;
   }
-  mailSubject = mailSubject.replace(/[^\x00-\x7F]/g, " "); // Remove non-ascii characters
-  mailSubject = mailSubject.replace(/[\\\/\*\|\"\<\>\:\#\?]/g, " "); // Remove special characters, such as \ / * | " < > : # ?
-  mailSubject = mailSubject.replace(/ +/g, "-"); // Replace spaces with -
+  mailSubject = mailSubject
+    .replace(/[^\x00-\x7F]/g, " ") // Remove non-ascii characters
+    .replace(/[\\\/\*\|\"\<\>\:\#\?]/g, " ") // Remove special characters, such as \ / * | " < > : # ?
+    .replace(/ +/g, "-"); // Replace spaces with -
+
   if (!success) {
     mailSubject += ".warning";
   }
-  mailSubject += ".patch";
-  return mailSubject;
+  return `${mailSubject}.patch`;
 }
 
 module.exports = {
   convertToPatch,
-  GetPatchFileName,
+  getPatchFileName,
 };
