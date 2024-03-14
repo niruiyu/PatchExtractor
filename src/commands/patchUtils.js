@@ -39,7 +39,10 @@ function convertToPatch(bodyText) {
   let success = true;
 
   let filePath = null;
-  const lines = bodyText.split(/\r\n|\n/);
+
+  const lines = bodyText
+    .replaceAll("\u00A0", " ")
+    .split(/\r\n|\n/);
   for (const line of lines) {
     let unixEol = true;
     let m;
