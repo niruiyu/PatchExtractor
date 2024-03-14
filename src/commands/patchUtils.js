@@ -32,24 +32,20 @@ function convertToPatch(bodyText) {
   const regexPatchHunkBinary = /^[a-zA-Z]\S+$/;
 
   let patchBody = "";
-  let addedLines = 0;
-  let deletedLines = 0;
-  let ascii = false;
-  let patchState = PatchStateStart;
+  let addedLinesInHunk = 0;
+  let deletedLinesInHunk = 0;
+  let asciiHunk = false;
+  let state = PatchStateStart;
   let success = true;
-
   let filePath = null;
 
-  const lines = bodyText
-    .replaceAll("\u00A0", " ")
-    .split(/\r\n|\n/);
-  for (const line of lines) {
+  for (const line of bodyText.replaceAll("\u00A0", " ").split(/\r\n|\n/)) {
     let unixEol = true;
     let m;
 
-    if ((patchState == PatchStateStart || patchState == PatchStateHunkEnd) && (m = line.match(regexPatchFileHeader))) {
+    if ((state == PatchStateStart || state == PatchStateHunkEnd) && (m = line.match(regexPatchFileHeader))) {
       // meet "diff --git"
-      patchState = PatchStateFileHeader;
+      state = PatchStateFileHeader;
       unixEol = true;
 
       console.assert(m[1].toString() == m[2].toString(), "file path mismatch!");
@@ -57,65 +53,65 @@ function convertToPatch(bodyText) {
 
       filePath = m[1].toString();
     } else if (
-      (patchState == PatchStateFileHeader || patchState == PatchStateHunkEnd) &&
+      (state == PatchStateFileHeader || state == PatchStateHunkEnd) &&
       ((m = line.match(regexPatchHunkAsciiHeader)) || line == "GIT binary patch")
     ) {
       // meet "@@ ..." or "GIT binary patch"
       unixEol = true;
-      patchState = PatchStateHunkHeader;
+      state = PatchStateHunkHeader;
 
       if (m) {
-        ascii = true;
-        deletedLines = parseInt(m[1].toString());
-        addedLines = parseInt(m[2].toString());
+        asciiHunk = true;
+        deletedLinesInHunk = parseInt(m[1].toString());
+        addedLinesInHunk = parseInt(m[2].toString());
       } else {
-        ascii = false;
+        asciiHunk = false;
       }
     } else if (
-      (patchState == PatchStateHunkHeader || patchState == PatchStateHunkEnd) &&
+      (state == PatchStateHunkHeader || state == PatchStateHunkEnd) &&
       line.match(regexPatchHunkBinarySubHeader)
     ) {
       // meet "delta ###" or "literal ###"
-      console.assert(!ascii, "Binary patch mixed with ascii patch!");
-      success = success && !ascii;
+      console.assert(!asciiHunk, "Binary patch mixed with ascii patch!");
+      success = success && !asciiHunk;
 
-      patchState = PatchStateHunkHeader;
+      state = PatchStateHunkHeader;
       unixEol = true;
-    } else if (patchState == PatchStateHunkHeader || patchState == PatchStateHunk) {
-      patchState = PatchStateHunk;
-      if (ascii) {
+    } else if (state == PatchStateHunkHeader || state == PatchStateHunk) {
+      state = PatchStateHunk;
+      if (asciiHunk) {
         // meet " xxyy", "+xxyy" "-xxyy" or "\ No newline at end of file"
         unixEol = filePath.endsWith(".sh");
 
         if (line != "\\ No newline at end of file" && line != "") {
           if (line[0] == " " || line[0] == "+") {
-            addedLines--;
+            addedLinesInHunk--;
           }
           if (line[0] == " " || line[0] == "-") {
-            deletedLines--;
+            deletedLinesInHunk--;
           }
         }
 
-        if (addedLines == 0 && deletedLines == 0) {
-          patchState = PatchStateHunkEnd;
+        if (addedLinesInHunk == 0 && deletedLinesInHunk == 0) {
+          state = PatchStateHunkEnd;
         }
-        success = success && addedLines >= 0 && deletedLines >= 0;
+        success = success && addedLinesInHunk >= 0 && deletedLinesInHunk >= 0;
       } else {
         unixEol = true;
 
         if (!line.match(regexPatchHunkBinary)) {
-          patchState = PatchStateHunkEnd;
+          state = PatchStateHunkEnd;
         }
       }
-    } else if (patchState == PatchStateHunkEnd && line == "-- ") {
+    } else if (state == PatchStateHunkEnd && line == "-- ") {
       unixEol = true;
-      patchState = PatchStateEnd;
+      state = PatchStateEnd;
     }
 
     // Seems Outlook has a bug which adds extra empty line in the hunk
     // when the previous line is a long while space line.
-    if (patchState == PatchStateHunk || patchState == PatchStateHunkEnd) {
-      if (ascii && line == "") {
+    if (state == PatchStateHunk || state == PatchStateHunkEnd) {
+      if (asciiHunk && line == "") {
         continue;
       }
     }
@@ -126,7 +122,7 @@ function convertToPatch(bodyText) {
     patchBody += line.replaceAll("\u00A0", " ") + (unixEol ? "\n" : "\r\n");
   }
 
-  if (patchState != PatchStateEnd) {
+  if (state != PatchStateEnd) {
     success = false;
   }
   return [success, patchBody];
